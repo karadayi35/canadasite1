@@ -1,4 +1,4 @@
-from flask import Flask, jsonify
+from flask import Flask, jsonify, request
 from flask_cors import CORS
 from telethon import TelegramClient, events
 import asyncio
@@ -16,6 +16,9 @@ api_id = '21745249'
 api_hash = '89cf10c8782c9c54b671fc5736ddcf3b'
 session_name = 'user_session'
 group_id = -1001216775179  # Hedef grup ID'si
+
+# Kullanıcı bilgilerini saklamak için bir liste
+user_database = []  # {"username": ..., "email": ..., "icon": ...}
 
 # İkon listesi
 ICON_LIST = [
@@ -35,15 +38,64 @@ BOTS = [
     {"name": "BetsioBot", "icon": "/public/slotticabot.png", "message": "Best Casino Go: <a href='https://t.ly/9-D_G'>Click</a>"},
 ]
 
-# Mesajları saklamak için listeler
+# Mesaj listeleri
 messages = []
 filtered_messages = []
 bot_messages = []
 
-@app.route("/api/data", methods=["GET"])
-def get_data():
-    return jsonify({"message": "Flask backend çalışıyor!"})
 
+# Kullanıcı Kayıt İşlemi
+@app.route("/register", methods=["POST"])
+def register_user():
+    data = request.json
+    username = data.get("username")
+    email = data.get("email")
+
+    # Eksik bilgi kontrolü
+    if not username or not email:
+        return jsonify({"error": "Kullanıcı adı ve e-posta gereklidir!"}), 400
+
+    # Daha önce kayıtlı mı kontrol et
+    for user in user_database:
+        if user["email"] == email:
+            return jsonify({"error": "Bu e-posta zaten kayıtlı!"}), 400
+
+    # Rastgele bir ikon ata
+    icon = random.choice(ICON_LIST)
+
+    # Kullanıcıyı kayıt et
+    user = {"username": username, "email": email, "icon": icon}
+    user_database.append(user)
+
+    return jsonify({"message": "Kayıt başarılı!", "user": user})
+
+
+# Tüm Kayıtlı Kullanıcıları Listeleme
+@app.route("/users", methods=["GET"])
+def list_users():
+    """Tüm kayıtlı kullanıcıları döndür."""
+    return jsonify(user_database)
+
+
+# Kullanıcı Giriş İşlemi
+@app.route("/login", methods=["POST"])
+def login_user():
+    data = request.json
+    email = data.get("email")
+
+    # Eksik bilgi kontrolü
+    if not email:
+        return jsonify({"error": "E-posta gereklidir!"}), 400
+
+    # Kullanıcıyı kontrol et
+    for user in user_database:
+        if user["email"] == email:
+            return jsonify({"message": "Giriş başarılı!", "user": user})
+
+    return jsonify({"error": "Kullanıcı bulunamadı!"}), 404
+
+
+# Tüm Mesajları Getir
 @app.route("/get_messages", methods=["GET"])
 def get_messages():
     """Kullanıcı ve bot mesajlarını döndür."""
@@ -53,12 +105,16 @@ def get_messages():
     bot_messages = []  # Listeyi temizle
     return jsonify(all_messages)
 
+
+# Mesajın Geçerliliğini Kontrol Et
 def is_valid_message(message_text):
     """Geçerli bir mesaj mı kontrol et."""
     if re.search(r'(https?://|t\.me)', message_text):
         return False
     return True
 
+
+# Telegram'dan Mesaj Çekme
 async def fetch_messages():
     """Telegram'dan mesajları sürekli çeken fonksiyon."""
     global messages
@@ -83,6 +139,8 @@ async def fetch_messages():
 
         await client.run_until_disconnected()
 
+
+# Mesajları İşleme
 def process_messages():
     """Mesajları işleyip filtrelenmiş mesajlara ekleyen fonksiyon."""
     global messages, filtered_messages
@@ -93,6 +151,8 @@ def process_messages():
             print(f"Mesaj işlendi: {message['content']}")
         time.sleep(3)  # Her mesaj arasında 3 saniye bekle
 
+
+# Bot Mesajlarını Planlama
 def schedule_bot_messages():
     """Bot mesajlarını düzenli olarak ekleyen fonksiyon."""
     global bot_messages
@@ -105,11 +165,14 @@ def schedule_bot_messages():
             })
         time.sleep(60)  # Her 60 saniyede bir bot mesajları eklenir
 
+
+# Telegram Mesajlarını Çekme İşlemini Başlatma
 def start_fetching():
     """Telegram mesajlarını çekmeyi başlat."""
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
     loop.run_until_complete(fetch_messages())
+
 
 if __name__ == "__main__":
     # Telegram mesajlarını çeken thread
