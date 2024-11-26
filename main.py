@@ -44,6 +44,11 @@ filtered_messages = []
 bot_messages = []
 
 
+@app.route("/api/data", methods=["GET"])
+def get_data():
+    return jsonify({"message": "Flask backend çalışıyor!"})
+
+
 # Kullanıcı Kayıt İşlemi
 @app.route("/register", methods=["POST"])
 def register_user():
